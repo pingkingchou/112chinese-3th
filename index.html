@@ -8,32 +8,40 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Noto Sans TC', sans-serif; line-height: 1.8; }
-        .question-group, .question-sub-group { 
-            border-left: 4px solid transparent; 
-            transition: border-color 0.3s; 
-            padding-left: 1rem;
-            margin-bottom: 2rem;
+        .question-group {
+            padding: 1rem;
         }
-        .correct { border-left-color: #22c55e; background-color: #f0fdf4; }
-        .incorrect { border-left-color: #ef4444; background-color: #fef2f2; }
+        .question-sub-group {
+            border-left: 4px solid transparent;
+            transition: all 0.3s ease-in-out;
+            padding: 1.5rem;
+            margin-top: 1rem;
+            border-radius: 0 8px 8px 0;
+        }
+        .correct { border-color: #22c55e; background-color: #f0fdf4; }
+        .incorrect { border-color: #ef4444; background-color: #fef2f2;}
         .reading-passage {
-            background-color: #f8fafc;
-            border: 1px solid #e5e7eb;
+            background-color: #fafafa;
+            border: 1px solid #e5e5e5;
             padding: 1.5rem;
             margin-bottom: 1.5rem;
             border-radius: 8px;
+            white-space: pre-wrap; /* Preserve whitespace and line breaks */
         }
-        .question-sub-group {
-            margin-left: 1rem;
-            margin-top: 1.5rem;
-            padding-top: 1.5rem;
-            border-top: 1px solid #e5e7eb;
-        }
-        #password-modal, #teacher-panel { display: none; } /* 預設隱藏 */
+        #password-modal, #teacher-panel, #alert-modal { display: none; } /* Default hidden */
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800">
 
+    <!-- Generic Alert Modal -->
+    <div id="alert-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white p-8 rounded-lg shadow-2xl w-full max-w-sm text-center">
+            <p id="alert-message" class="text-lg text-gray-700 mb-6"></p>
+            <button id="alert-ok-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg">確認</button>
+        </div>
+    </div>
+
+    <!-- Password Modal -->
     <div id="password-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div class="bg-white p-8 rounded-lg shadow-2xl w-full max-w-sm">
             <h3 class="text-xl font-bold mb-4">教師登入</h3>
@@ -53,16 +61,16 @@
         </header>
         
         <div class="bg-white p-6 sm:p-8 rounded-xl shadow-md">
-            <div id="student-info-container">
+            <div id="student-info-container" class="mb-8">
                 <h2 class="text-xl font-bold mb-4 border-b pb-2">考生資訊</h2>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label for="student-class" class="block text-sm font-medium text-gray-700 mb-1">班級</label>
-                        <input type="text" id="student-class" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        <input type="text" id="student-class" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="請輸入班級，例如：三年一班">
                     </div>
                     <div>
                         <label for="student-name" class="block text-sm font-medium text-gray-700 mb-1">姓名</label>
-                        <input type="text" id="student-name" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        <input type="text" id="student-name" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="請輸入姓名">
                     </div>
                 </div>
                 <div id="student-info-error" class="text-red-500 text-sm mt-2 hidden"></div>
@@ -73,8 +81,8 @@
                     <!-- Questions will be dynamically inserted here -->
                 </div>
                 <div class="mt-10 text-center">
-                    <button type="submit" id="submit-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition-transform transform hover:scale-105 disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
-                        系統載入中...
+                    <button type="submit" id="submit-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition-transform transform hover:scale-105">
+                        送出測驗
                     </button>
                 </div>
             </form>
@@ -84,7 +92,7 @@
                 <div id="score" class="text-4xl font-bold text-center text-blue-700 mb-2"></div>
                 <div id="summary" class="text-center text-lg mb-8"></div>
                 <div id="db-status" class="text-center text-sm text-gray-500 mb-6"></div>
-                <div class="flex justify-center items-center gap-4">
+                <div class="flex justify-center items-center gap-4 flex-wrap">
                     <button id="download-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition-transform transform hover:scale-105">
                         下載錯誤報告
                     </button>
@@ -126,16 +134,60 @@
     </div>
 
     <script type="module">
+        // Import functions from the Firebase SDKs
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, getDocs, query, where, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, getDocs, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // --- 設定區 ---
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "YOUR_API_KEY", authDomain: "YOUR_AUTH_DOMAIN", projectId: "YOUR_PROJECT_ID" };
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-mandarin-quiz-g3-112-singlepage';
+        // --- 設定區 (已設為可攜帶版本) ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyA5yiDVFaIKOJ-UKIqEKpwftxhEQ8SSBmM",
+            authDomain: "th-chinese-1.firebaseapp.com",
+            projectId: "th-chinese-1",
+            storageBucket: "th-chinese-1.appspot.com",
+            messagingSenderId: "740688157010",
+            appId: "1:740688157010:web:ce56f965bbebf3fea5428b",
+            measurementId: "G-HWCCCX2XF2"
+        };
+        const DB_COLLECTION_NAME = "results_grade_3_chinese_112"; // 為三年級設定獨立的資料表
         const teacherPassword = "pingking1@";
         
-        // --- 題目資料 (已根據112年題本校正並將題組整合) ---
+        // --- Firebase 初始化 ---
+        let app, db;
+        try {
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+        } catch (e) {
+            console.error("Firebase 初始化失敗:", e);
+            showAlert("系統載入失敗，請重新整理頁面。");
+        }
+
+        // --- DOM 元素 ---
+        const allDOM = {
+            quizContainer: document.getElementById('quiz-container'),
+            form: document.getElementById('quiz-form'),
+            resultsContainer: document.getElementById('results'),
+            scoreEl: document.getElementById('score'),
+            summaryEl: document.getElementById('summary'),
+            downloadBtn: document.getElementById('download-btn'),
+            retryBtn: document.getElementById('retry-btn'),
+            studentInfoContainer: document.getElementById('student-info-container'),
+            studentInfoError: document.getElementById('student-info-error'),
+            dbStatusEl: document.getElementById('db-status'),
+            teacherLoginBtn: document.getElementById('teacher-login-btn'),
+            teacherPanel: document.getElementById('teacher-panel'),
+            resultsTableBody: document.getElementById('results-table-body'),
+            submitBtn: document.getElementById('submit-btn'),
+            exportCsvBtn: document.getElementById('export-csv-btn'),
+            passwordModal: document.getElementById('password-modal'),
+            passwordInput: document.getElementById('password-input'),
+            passwordSubmitBtn: document.getElementById('password-submit-btn'),
+            passwordCancelBtn: document.getElementById('password-cancel-btn'),
+            alertModal: document.getElementById('alert-modal'),
+            alertMessage: document.getElementById('alert-message'),
+            alertOkBtn: document.getElementById('alert-ok-btn'),
+        };
+
+        // --- 題目資料 ---
         const questionData = [
             { "question": "1. 下列「 」內的字，哪一個讀音與另外三個不同？", "options": ["① 玩具店中有許多奇「形」怪狀的玩偶。", "② 這個人因為偷東西而被法院判「刑」。", "③ 在各種「行」業中，馴獸師最吸引我。", "④ 他的髮「型」怪異，穿著也與眾不同。"], "answer": 3 },
             { "question": "2. 這齣音樂劇的女主「角」前一天演出時撞到桌「角」而受傷，因此今天的演出由其他人代替她上場。\n上面的「角」字，按照順序應該讀作什麼？", "options": ["① ㄐㄩㄝˊ/ㄐㄧㄠˇ", "② ㄐㄧㄠˇ/ㄐㄩㄝˊ", "③ ㄐㄩㄝˊ/ㄐㄩㄝˊ", "④ ㄐㄧㄠˇ/ㄐㄧㄠˇ"], "answer": 4 },
@@ -187,86 +239,29 @@
             }
         ];
 
-        // --- Firebase 初始化 ---
-        let db, auth;
-        let userId = null;
-        let isAuthReady = false;
-
-        try {
-            const app = initializeApp(firebaseConfig);
-            auth = getAuth(app);
-            db = getFirestore(app);
-            setLogLevel('debug'); 
-        } catch (e) {
-            console.error("Firebase 初始化失敗:", e);
-            alert("系統載入失敗，請重新整理頁面。");
-        }
-
-        onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                userId = user.uid;
-                console.log("使用者已登入:", userId);
-            } else {
-                try {
-                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        await signInWithCustomToken(auth, __initial_auth_token);
-                    } else {
-                        await signInAnonymously(auth);
-                    }
-                } catch (error) {
-                    console.error("匿名或自訂Token登入失敗:", error);
-                }
-            }
-            isAuthReady = true;
-            // **FIX**: Enable submit button once auth is ready
-            allDOM.submitBtn.disabled = false;
-            allDOM.submitBtn.textContent = '送出答案';
-        });
-
-        // --- DOM 元素 ---
-        const allDOM = {
-            quizContainer: document.getElementById('quiz-container'),
-            form: document.getElementById('quiz-form'),
-            resultsContainer: document.getElementById('results'),
-            scoreEl: document.getElementById('score'),
-            summaryEl: document.getElementById('summary'),
-            downloadBtn: document.getElementById('download-btn'),
-            retryBtn: document.getElementById('retry-btn'),
-            studentInfoContainer: document.getElementById('student-info-container'),
-            studentInfoError: document.getElementById('student-info-error'),
-            dbStatusEl: document.getElementById('db-status'),
-            teacherLoginBtn: document.getElementById('teacher-login-btn'),
-            teacherPanel: document.getElementById('teacher-panel'),
-            resultsTableBody: document.getElementById('results-table-body'),
-            submitBtn: document.getElementById('submit-btn'),
-            exportCsvBtn: document.getElementById('export-csv-btn'),
-            passwordModal: document.getElementById('password-modal'),
-            passwordInput: document.getElementById('password-input'),
-            passwordSubmitBtn: document.getElementById('password-submit-btn'),
-            passwordCancelBtn: document.getElementById('password-cancel-btn'),
-        };
-
         let userAnswers = {};
         let flatQuestions = [];
 
         // --- UI Creation & Logic ---
+        function showAlert(message) {
+            allDOM.alertMessage.textContent = message;
+            allDOM.alertModal.style.display = 'flex';
+        }
+
         function initializeQuiz() {
             let questionCounter = 0;
             allDOM.quizContainer.innerHTML = ''; // 清空容器
 
             questionData.forEach((item) => {
                 if (item.isGroup) {
-                    // 處理題組
                     const groupContainer = document.createElement('div');
-                    groupContainer.className = 'p-4 rounded-lg bg-gray-50 mb-4';
+                    groupContainer.className = 'question-group p-4 rounded-lg bg-gray-50';
                     
-                    // 顯示文章
                     const passageDiv = document.createElement('div');
                     passageDiv.className = 'reading-passage';
                     passageDiv.innerHTML = `<p class="whitespace-pre-wrap">${item.passage}</p>`;
                     groupContainer.appendChild(passageDiv);
 
-                    // 顯示題組中的每個問題
                     item.questions.forEach(subItem => {
                         const questionDiv = createQuestionElement(subItem, questionCounter);
                         questionDiv.classList.add('question-sub-group');
@@ -276,7 +271,6 @@
                     });
                     allDOM.quizContainer.appendChild(groupContainer);
                 } else {
-                    // 處理單一問題
                     const questionDiv = createQuestionElement(item, questionCounter);
                     allDOM.quizContainer.appendChild(questionDiv);
                     flatQuestions.push(item);
@@ -301,6 +295,9 @@
                 if (event.key === 'Enter') handleLogin();
             });
             allDOM.exportCsvBtn.addEventListener('click', exportToCsv);
+            allDOM.alertOkBtn.addEventListener('click', () => {
+                allDOM.alertModal.style.display = 'none';
+            });
         }
 
         function createQuestionElement(item, questionIndex) {
@@ -334,12 +331,16 @@
         async function submitQuiz(e) {
             e.preventDefault();
 
+            if (!db) {
+                showAlert("資料庫連線失敗，無法提交答案。");
+                return;
+            }
+
             const studentClassEl = document.getElementById('student-class');
             const studentNameEl = document.getElementById('student-name');
             const studentClass = studentClassEl.value.trim();
             const studentName = studentNameEl.value.trim();
 
-            // **FIX**: Visual feedback for validation instead of alert
             studentClassEl.classList.remove('border-red-500');
             studentNameEl.classList.remove('border-red-500');
             allDOM.studentInfoError.classList.add('hidden');
@@ -383,9 +384,7 @@
 
             allDOM.dbStatusEl.textContent = '正在儲存作答紀錄...';
             try {
-                const resultId = auth.currentUser ? auth.currentUser.uid : `${studentClass}-${studentName}-${Date.now()}`;
-                const docRef = doc(db, "artifacts", appId, "public", "data", "results", resultId);
-                await setDoc(docRef, {
+                await addDoc(collection(db, DB_COLLECTION_NAME), {
                     studentClass: studentClass,
                     studentName: studentName,
                     score: finalScore,
@@ -398,7 +397,7 @@
                 allDOM.dbStatusEl.style.color = 'green';
             } catch (error) {
                 console.error("Error adding document: ", error);
-                allDOM.dbStatusEl.textContent = '作答紀錄儲存失敗，請檢查網路連線或聯繫管理員。';
+                allDOM.dbStatusEl.textContent = '作答紀錄儲存失敗，請檢查網路連線。';
                 allDOM.dbStatusEl.style.color = 'red';
             }
 
@@ -406,6 +405,7 @@
             allDOM.summaryEl.textContent = `答對 ${score} 題，共 ${totalQuestions} 題。`;
 
             allDOM.form.classList.add('hidden');
+            allDOM.studentInfoContainer.classList.add('hidden');
             allDOM.resultsContainer.classList.remove('hidden');
             
             allDOM.resultsContainer.scrollIntoView({ behavior: 'smooth' });
@@ -427,7 +427,7 @@
                     let passageHTML = '';
                     // 找到這個問題所屬的文章
                     for (const group of questionData) {
-                        if (group.isGroup && group.questions.includes(item)) {
+                        if (group.isGroup && group.questions.some(q => q.question === item.question)) {
                             passageHTML = `<div style="background-color:#f3f4f6; padding:10px; border-radius:5px; margin-bottom:10px; white-space: pre-wrap;">${group.passage}</div>`;
                             break;
                         }
@@ -436,12 +436,12 @@
                          passageHTML = `<div style="background-color:#f3f4f6; padding:10px; border-radius:5px; margin-bottom:10px; white-space: pre-wrap;">${item.passage}</div>`;
                     }
 
-
                     incorrectQuestionsHTML += `
                         <div style="margin-bottom: 1.5rem; padding-left: 1rem; border-left: 3px solid #ef4444;">
                             ${passageHTML}
                             <p style="margin-bottom: 0.5rem;"><strong>題目 ${index + 1}:</strong> ${questionText}</p>
                             <p>你的答案: ${userAnswerText}</p>
+                            <p>正確答案: ${item.options[item.answer - 1]}</p>
                         </div>`;
                 }
             });
@@ -449,7 +449,7 @@
             const reportWindow = window.open('', '_blank');
             reportWindow.document.write(`
                 <html>
-                <head><title>測驗結果報告</title><style>body { font-family: 'Noto Sans TC', sans-serif; padding: 2rem; } h1, h2 { text-align: center; } .info, .score-summary { border-bottom: 2px solid #ccc; padding-bottom: 1rem; margin-bottom: 1rem; }</style></head>
+                <head><title>測驗結果報告</title><style>body { font-family: 'Noto Sans TC', sans-serif; padding: 2rem; line-height: 1.8; } h1, h2 { text-align: center; } .info, .score-summary { border-bottom: 2px solid #ccc; padding-bottom: 1rem; margin-bottom: 1rem; }</style></head>
                 <body>
                     <h1>三年級國語科 測驗報告</h1>
                     <div class="info"><p><strong>班級:</strong> ${studentClass}</p><p><strong>姓名:</strong> ${studentName}</p></div>
@@ -471,8 +471,7 @@
             allDOM.resultsTableBody.innerHTML = '<tr><td colspan="4" class="text-center p-4">正在載入紀錄...</td></tr>';
             
             try {
-                const resultsCollectionRef = collection(db, "artifacts", appId, "public", "data", "results");
-                const q = query(resultsCollectionRef);
+                const q = query(collection(db, DB_COLLECTION_NAME));
                 const querySnapshot = await getDocs(q);
                 
                 allDOM.resultsTableBody.innerHTML = '';
@@ -504,7 +503,7 @@
 
             } catch (error) {
                 console.error("Error getting documents: ", error);
-                allDOM.resultsTableBody.innerHTML = '<tr><td colspan="4" class="text-center p-4 text-red-500">讀取紀錄失敗，請檢查網路連線或聯繫管理員。</td></tr>';
+                allDOM.resultsTableBody.innerHTML = '<tr><td colspan="4" class="text-center p-4 text-red-500">讀取紀錄失敗，請檢查網路連線。</td></tr>';
             }
         };
         
@@ -516,18 +515,21 @@
                 allDOM.passwordInput.value = '';
                 showTeacherPanel();
             } else {
-                alert("密碼錯誤！");
+                showAlert("密碼錯誤！");
                 allDOM.passwordInput.value = '';
             }
         };
 
         async function exportToCsv() {
+             if (!db) {
+                showAlert("資料庫連線失敗，無法匯出。");
+                return;
+            }
             try {
-                const resultsCollectionRef = collection(db, "artifacts", appId, "public", "data", "results");
-                const q = query(resultsCollectionRef);
+                const q = query(collection(db, DB_COLLECTION_NAME));
                 const querySnapshot = await getDocs(q);
                 if (querySnapshot.empty) {
-                    alert("目前沒有任何作答紀錄可匯出。");
+                    showAlert("目前沒有任何作答紀錄可匯出。");
                     return;
                 }
 
@@ -579,12 +581,13 @@
 
             } catch (error) {
                 console.error("無法匯出CSV: ", error);
-                alert("匯出紀錄失敗，請檢查網路連線或聯繫管理員。");
+                showAlert("匯出紀錄失敗，請檢查網路連線。");
             }
         };
         
+        // --- App Entry Point ---
         initializeQuiz();
+
     </script>
 </body>
 </html>
-
