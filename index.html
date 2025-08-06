@@ -436,12 +436,12 @@
                          passageHTML = `<div style="background-color:#f3f4f6; padding:10px; border-radius:5px; margin-bottom:10px; white-space: pre-wrap;">${item.passage}</div>`;
                     }
 
+                    // **MODIFICATION**: Removed the line that shows the correct answer.
                     incorrectQuestionsHTML += `
                         <div style="margin-bottom: 1.5rem; padding-left: 1rem; border-left: 3px solid #ef4444;">
                             ${passageHTML}
                             <p style="margin-bottom: 0.5rem;"><strong>題目 ${index + 1}:</strong> ${questionText}</p>
                             <p>你的答案: ${userAnswerText}</p>
-                            <p>正確答案: ${item.options[item.answer - 1]}</p>
                         </div>`;
                 }
             });
